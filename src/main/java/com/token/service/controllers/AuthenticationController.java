@@ -41,7 +41,6 @@ public class AuthenticationController {
 
     @GetMapping(path = "/authenticate/{token}")
     public ResponseEntity<Void> login(@PathVariable String token) throws IOException {
-        System.out.println("--->"+token);
         String userName = jwtUtil.extractUsername(token);
         UserDetails userDetails = service.loadUserByUsername(userName);
         if(jwtUtil.isTokenExpired(token)){
