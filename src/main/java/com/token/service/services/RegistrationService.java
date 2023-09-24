@@ -8,13 +8,13 @@ import com.token.service.repository.RoleRepository;
 import com.token.service.repository.UserRepository;
 import com.token.service.utils.EmailUtils;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.HashSet;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -23,48 +23,47 @@ import java.util.UUID;
 @Slf4j
 public class RegistrationService {
 
-    @Autowired
-    UserRepository userRepository;
-    @Autowired
-    RoleRepository roleRepository;
-    @Autowired
-    private PasswordEncoder passwordEncoder;
-    @Autowired
-    EmailService emailService;
+    private final UserRepository userRepository;
+    private final RoleRepository roleRepository;
+    private final PasswordEncoder passwordEncoder;
+    private final EmailService emailService;
 
     @Value("${api.url}")
-    String apiUrl;
+    private String apiUrl;
+
+    private static final String USERNAME_EXISTS_ERROR_CODE = "104";
+    private static final String EMAIL_EXISTS_ERROR_CODE = "105";
+    private static final String TOKEN_NOT_FOUND_ERROR_CODE = "102";
+
+    public RegistrationService(UserRepository userRepository, RoleRepository roleRepository,
+                              PasswordEncoder passwordEncoder, EmailService emailService) {
+        this.userRepository = userRepository;
+        this.roleRepository = roleRepository;
+        this.passwordEncoder = passwordEncoder;
+        this.emailService = emailService;
+    }
 
     public void registerUser(RegistrationRequest registrationRequest) {
         if (userRepository.existsByUserName(registrationRequest.getUserName())) {
-            throw new TokenServiceException("Username already exists!", "104");
+            throw new TokenServiceException("Username already exists!", USERNAME_EXISTS_ERROR_CODE);
         }
         if (userRepository.existsByEmail(registrationRequest.getEmail())) {
-            throw new TokenServiceException("Email already exists!", "104");
+            throw new TokenServiceException("Email already exists!", EMAIL_EXISTS_ERROR_CODE);
         }
         String tokenForNewUser = UUID.randomUUID().toString();
-        User user = user(registrationRequest, tokenForNewUser);
-        Set<Role> roles = new HashSet<>();
-        Role userRole = roleRepository.findByName("ROLE_USER").get();
-        roles.add(userRole);
-        user.setRoles(roles);
+        User user = createUserFromRegistrationRequest(registrationRequest, tokenForNewUser);
         userRepository.save(user);
         String link = apiUrl + "/signup/confirm?token=" + tokenForNewUser;
         emailService.sendMail(registrationRequest.getEmail(), EmailUtils.buildEmail(registrationRequest.getFullName(), link));
     }
 
-    /**
-     * @param registrationRequest
-     * @return
-     */
-    private User user(RegistrationRequest registrationRequest, String token) {
+    private User createUserFromRegistrationRequest(RegistrationRequest registrationRequest, String token) {
         User user = new User();
         user.setUserName(registrationRequest.getUserName());
         user.setFullName(registrationRequest.getFullName());
         user.setEmail(registrationRequest.getEmail());
         user.setPassword(passwordEncoder.encode(registrationRequest.getPassword()));
         user.setMobileNumber(registrationRequest.getMobileNumber());
-        user.setPassword(passwordEncoder.encode(registrationRequest.getPassword()));
         user.setToken(token);
         user.setEnabled(false);
         return user;
@@ -74,9 +73,10 @@ public class RegistrationService {
         if (userRepository.existsByToken(token)) {
             log.info("Token exists in the user DB, hence updating the isEnabled parameter");
         } else {
-            throw new TokenServiceException("Token not found for the user", "102");
+            throw new TokenServiceException("Token not found for the user", TOKEN_NOT_FOUND_ERROR_CODE);
         }
-        User user = userRepository.findByToken(token).orElseThrow(() -> new TokenServiceException("Not found", "102"));
+        Optional<User> userOptional = userRepository.findByToken(token);
+        User user = userOptional.orElseThrow(() -> new TokenServiceException("Not found", TOKEN_NOT_FOUND_ERROR_CODE));
         user.setEnabled(true);
         userRepository.save(user);
         log.info("isEnabled Parameter is updated in DB");
