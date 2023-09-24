@@ -14,25 +14,25 @@ import javax.mail.internet.MimeMessage;
 @Slf4j
 public class EmailService {
 
-    @Autowired
-    private JavaMailSender mailSender;
+    private final JavaMailSender mailSender;
 
     private static final String SENDER = "tnzngdw@gmail.com";
     private static final String UTF = "utf-8";
 
+    @Autowired
+    public EmailService(JavaMailSender mailSender) {
+        this.mailSender = mailSender;
+    }
+
     @Async
-    public void sendMail(String emailTo, String emailText) {
-        try {
-            MimeMessage mimeMessage = mailSender.createMimeMessage();
-            MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, UTF);
-            helper.setText(emailText, true);
-            helper.setTo(emailTo);
-            helper.setSubject("Confirm your email");
-            helper.setFrom(SENDER);
-            mailSender.send(mimeMessage);
-        } catch (MessagingException e) {
-            log.error("Failed to send email for: " + emailTo + "\n" + e.getLocalizedMessage());
-            throw new IllegalArgumentException("Failed to send email for: " + emailTo);
-        }
+    public void sendMail(String emailTo, String emailText) throws MessagingException {
+        MimeMessage mimeMessage = mailSender.createMimeMessage();
+        MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, UTF);
+        helper.setText(emailText, true);
+        helper.setTo(emailTo);
+        helper.setSubject("Confirm your email");
+        helper.setFrom(SENDER);
+        mailSender.send(mimeMessage);
+        log.info("Email sent to: " + emailTo);
     }
 }
