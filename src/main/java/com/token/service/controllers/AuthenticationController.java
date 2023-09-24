@@ -18,38 +18,45 @@ import org.springframework.web.bind.annotation.*;
 import java.io.IOException;
 
 @RestController
+@RequestMapping("/authentication")
 @Slf4j
 public class AuthenticationController {
 
-    @Autowired
-    private JwtUtils jwtUtil;
-    @Autowired
-    private AuthenticationManager authenticationManager;
+    private final JwtUtils jwtUtil;
+    private final AuthenticationManager authenticationManager;
+    private final UserService userService;
 
     @Autowired
-    private UserService service;
-
-    @PostMapping(path = "/authenticate")
-    public ResponseEntity<TokenResponse> login(@RequestBody LoginRequest loginRequest) throws IOException {
-        log.info("Request Body for Login {}", JsonUtils.toString(loginRequest));
-        authenticationManager.authenticate(new UsernamePasswordAuthenticationToken(loginRequest.getUsername(), loginRequest.getPassword()));
-        log.info("Authentication Successful !");
-        TokenResponse tokenResponse = new TokenResponse();
-        tokenResponse.setToken(jwtUtil.generateToken(loginRequest.getUsername()));
-        return new ResponseEntity<>(tokenResponse, HttpStatus.OK);
+    public AuthenticationController(JwtUtils jwtUtil, AuthenticationManager authenticationManager, UserService userService) {
+        this.jwtUtil = jwtUtil;
+        this.authenticationManager = authenticationManager;
+        this.userService = userService;
     }
 
-    @GetMapping(path = "/authenticate/{token}")
-    public ResponseEntity<Void> login(@PathVariable String token) throws IOException {
-        String userName = jwtUtil.extractUsername(token);
-        UserDetails userDetails = service.loadUserByUsername(userName);
-        if(jwtUtil.isTokenExpired(token)){
-            throw new TokenServiceException("Token is expired","102");
+    @PostMapping("/login")
+    public ResponseEntity<TokenResponse> login(@RequestBody LoginRequest loginRequest) throws IOException {
+        log.info("Received login request for username: {}", loginRequest.getUsername());
+        authenticationManager.authenticate(new UsernamePasswordAuthenticationToken(loginRequest.getUsername(), loginRequest.getPassword()));
+        log.info("Authentication successful for username: {}", loginRequest.getUsername());
+        String token = jwtUtil.generateToken(loginRequest.getUsername());
+        TokenResponse tokenResponse = new TokenResponse(token);
+        return ResponseEntity.ok(tokenResponse);
+    }
+
+    @GetMapping("/validate/{token}")
+    public ResponseEntity<Void> validateToken(@PathVariable String token) {
+        String username = jwtUtil.extractUsername(token);
+        UserDetails userDetails = userService.loadUserByUsername(username);
+        
+        if (jwtUtil.isTokenExpired(token)) {
+            throw new TokenServiceException("Token is expired", "102");
         }
-        if(!jwtUtil.validateToken(token, userDetails)){
-            throw new TokenServiceException("Invalid Token","102");
+        
+        if (!jwtUtil.validateToken(token, userDetails)) {
+            throw new TokenServiceException("Invalid Token", "102");
         }
-        log.info("Token Authentication Successful !");
-        return new ResponseEntity<>(HttpStatus.OK);
+
+        log.info("Token authentication successful for username: {}", username);
+        return ResponseEntity.ok().build();
     }
 }
